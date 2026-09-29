@@ -1,0 +1,19 @@
+{
+  "name": "simple_route",
+  "waypoints": [
+    {
+      "north_m": 500,
+      "east_m": 0,
+      "altitude_m": 420,
+      "airspeed_m_s": 22,
+      "capture_radius_m": 80
+    },
+    {
+      "north_m": 800,
+      "east_m": 200,
+      "altitude_m": 460,
+      "airspeed_m_s": 23,
+      "capture_radius_m": 100
+    }
+  ]
+}

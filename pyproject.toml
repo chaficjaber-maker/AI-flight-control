@@ -1,0 +1,28 @@
+[project]
+name = "ai-flight-control"
+version = "0.1.0"
+description = "Simulation and control stack for AI-assisted flight control"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+flight-sim = "ai_flight_control.cli:main"
+flight-stack = "ai_flight_control.cli:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

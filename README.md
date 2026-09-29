@@ -32,22 +32,35 @@ python3 -m pytest -q
 python3 -m ai_flight_control.cli --target 1000 --initial 800 --duration 600
 ```
 
+## Architecture (three AI-adaptive functions)
+
+| Layer | Function | Reference module |
+|-------|----------|------------------|
+| **Mission** | Follow operational plan (segments, sequencing) | `layers/mission.py` |
+| **Maneuver** | Execute climb/hold/etc. setpoints | `layers/maneuver.py` |
+| **Stability** | Critical parameters, inner loop, envelope guardian | `layers/stability.py` |
+
+Orchestration: `FlightControlStack` in `stack.py`. Full design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+Each layer implements **`adapt()`** for online tuning (reference rules today; swap in neural policies per layer later).
+
 ## Layout
 
 ```
 src/ai_flight_control/
+  state.py         # FlightState, MissionSpec, setpoints
+  stack.py         # FlightControlStack
+  layers/          # mission, maneuver, stability
   dynamics.py      # plant (will grow toward fixed-wing axes)
-  pid.py           # reusable PID blocks
-  sim.py           # closed-loop harness (not a mission simulator)
-  agents/          # controller implementations
+  sim.py           # legacy single-agent harness
+  agents/          # legacy FlightAgent (PID baseline)
 tests/
 ```
 
 ## Controller dev roadmap (fixed-wing)
 
-1. **Longitudinal** — airspeed + altitude (TECS-style or decoupled PID baseline)
-2. **Lateral** — coordinated turn / roll-to-bank guidance into inner loops
-3. **Attitude / rate inner loops** — surface commands with saturations and limits
-4. **AI policies** — replace or wrap selected loops via `FlightAgent` and the same harness
+1. Extend `FlightState` + layers for **airspeed, attitude, lateral** channels  
+2. Replace reference `adapt()` / `step()` with learned policies per layer  
+3. Harden stability **guardian** tests (stall margin, bank, rate limits)  
 
-Integration with external sims and missions stays a separate phase after controllers are stable here.
+Integration with external sims stays a later phase.

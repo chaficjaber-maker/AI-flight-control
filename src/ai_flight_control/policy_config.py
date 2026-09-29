@@ -20,3 +20,7 @@ class PolicyConfig:
     def rollout_order() -> "PolicyConfig":
         """Stability only (first in user rollout order)."""
         return PolicyConfig(stability="neural", maneuver="reference", mission="reference")
+
+    @staticmethod
+    def default_reference() -> "PolicyConfig":
+        return PolicyConfig()

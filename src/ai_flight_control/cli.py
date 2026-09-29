@@ -9,6 +9,13 @@ from ai_flight_control.policy_config import PolicyConfig
 from ai_flight_control.sim import run_altitude_hold
 from ai_flight_control.stack import FlightControlStack
 from ai_flight_control.state import MissionSpec
+from ai_flight_control.simulate import (
+    MissionSimulationConfig,
+    print_simulation_summary,
+    run_mission_simulation,
+    write_simulation_csv,
+    write_simulation_report_json,
+)
 from ai_flight_control.wind import WindField
 
 
@@ -96,6 +103,54 @@ def _run_stack(args: argparse.Namespace) -> None:
         print(f"Final airspeed: {last.airspeed_m_s:.1f} m/s  segment={last.segment_index}")
 
 
+def _run_simulate(args: argparse.Namespace) -> None:
+    policy = PolicyConfig.all_neural() if args.all_neural else PolicyConfig(
+        stability=args.stability,
+        maneuver=args.maneuver,
+        mission=args.mission_policy,
+    )
+    wind = None
+    if not args.no_wind:
+        wind = WindField(args.wind_n, args.wind_e, args.gust)
+    initial = FixedWingState(
+        north_m=args.north,
+        east_m=args.east,
+        altitude_m=args.initial_alt,
+        airspeed_m_s=args.airspeed,
+        heading_rad=math.radians(args.heading_deg),
+        bank_rad=0.0,
+        flight_path_angle_rad=0.0,
+    )
+    if args.mission_file:
+        config = MissionSimulationConfig(
+            mission_file=args.mission_file,
+            policy=policy,
+            duration_s=args.duration,
+            dt=args.dt,
+            initial=initial,
+            wind=wind,
+            train_if_missing=not args.no_train,
+        )
+    else:
+        config = MissionSimulationConfig(
+            mission=_resolve_mission(args.mission_name),
+            policy=policy,
+            duration_s=args.duration,
+            dt=args.dt,
+            initial=initial,
+            wind=wind,
+            train_if_missing=not args.no_train,
+        )
+    result, report = run_mission_simulation(config)
+    print_simulation_summary(report)
+    if args.csv:
+        write_simulation_csv(result, args.csv)
+        print(f"Wrote CSV: {args.csv}")
+    if args.report:
+        write_simulation_report_json(report, args.report)
+        print(f"Wrote report: {args.report}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI flight control simulation CLI.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -140,6 +195,38 @@ def main() -> None:
     )
     stack.add_argument("--no-train", action="store_true")
     stack.set_defaults(func=_run_stack)
+
+    sim = sub.add_parser("simulate", help="Mission + flight control sim with summary + logs")
+    sim.add_argument("--mission-file", type=str, default="", help="Default: use --mission-name")
+    sim.add_argument(
+        "--mission-name",
+        choices=("hold", "climb", "box", "training"),
+        default="training",
+    )
+    sim.add_argument("--duration", type=float, default=240.0)
+    sim.add_argument("--dt", type=float, default=0.05)
+    sim.add_argument("--initial-alt", type=float, default=380.0)
+    sim.add_argument("--airspeed", type=float, default=22.0)
+    sim.add_argument("--north", type=float, default=0.0)
+    sim.add_argument("--east", type=float, default=0.0)
+    sim.add_argument("--heading-deg", type=float, default=0.0)
+    sim.add_argument("--wind-n", type=float, default=3.0)
+    sim.add_argument("--wind-e", type=float, default=-2.0)
+    sim.add_argument("--gust", type=float, default=0.5)
+    sim.add_argument("--no-wind", action="store_true")
+    sim.add_argument("--stability", choices=("reference", "neural"), default="reference")
+    sim.add_argument("--maneuver", choices=("reference", "neural"), default="reference")
+    sim.add_argument(
+        "--mission-policy",
+        dest="mission_policy",
+        choices=("reference", "neural"),
+        default="reference",
+    )
+    sim.add_argument("--all-neural", action="store_true")
+    sim.add_argument("--no-train", action="store_true")
+    sim.add_argument("--csv", type=str, default="")
+    sim.add_argument("--report", type=str, default="")
+    sim.set_defaults(func=_run_simulate)
 
     args = parser.parse_args()
     args.func(args)

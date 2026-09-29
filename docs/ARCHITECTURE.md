@@ -96,7 +96,7 @@ Adaptation must be **bounded** (max gain change per step) for flight safety duri
 | Maneuver | Mode-specific profiles (FBWA, AUTO submodes) | Roll/pitch/ speed targets |
 | Stability | Attitude/rate PIDs + TECS inner | Surfaces, throttle |
 
-Current repo uses a **1-D longitudinal plant**; the same three layers collapse to altitude mission segments → climb/hold maneuver → thrust stability with vertical-speed limits.
+The repo now includes a **simplified fixed-wing plant** (position, altitude, airspeed, heading, bank) plus a **1-D legacy harness** for fast vertical-only tests. Longitudinal inner loop uses **adaptive TECS**; lateral maneuvering uses **level-turn** bank commands; mission supports **NED waypoint routes**.
 
 ## Implementation in this repository
 

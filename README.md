@@ -57,10 +57,32 @@ src/ai_flight_control/
 tests/
 ```
 
-## Controller dev roadmap (fixed-wing)
+## Fixed-wing harness
 
-1. Extend `FlightState` + layers for **airspeed, attitude, lateral** channels  
-2. Replace reference `adapt()` / `step()` with learned policies per layer  
-3. Harden stability **guardian** tests (stall margin, bank, rate limits)  
+```python
+from ai_flight_control.fixed_wing_plant import FixedWingState
+from ai_flight_control.stack import FlightControlStack
+from ai_flight_control.state import MissionSpec, WaypointTarget
 
-Integration with external sims stays a later phase.
+spec = MissionSpec.waypoint_route([
+    WaypointTarget(north_m=800, east_m=0, altitude_m=400, airspeed_m_s=22),
+])
+FlightControlStack().run_fixed_wing(
+    spec,
+    initial=FixedWingState(0, 0, 400, 22, 0, 0, 0),
+    duration_s=90,
+    dt=0.05,
+)
+```
+
+- **Stability:** adaptive TECS (height + speed) + bank inner loop + envelope limits  
+- **Maneuver:** level turn / track to waypoint  
+- **Mission:** waypoint sequencing with capture radius  
+
+Legacy 1-D: `stack.run(...)` with `LongitudinalState` (unchanged tests).
+
+## Next steps
+
+1. Replace reference `adapt()` / `step()` with learned policies per layer  
+2. Harden guardian tests (stall margin, cross-track, wind)  
+3. External sim integration (later)

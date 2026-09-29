@@ -1,0 +1,46 @@
+{
+  "name": "box_pattern",
+  "segments": [
+    {
+      "kind": "climb_to",
+      "altitude_m": 450,
+      "max_vertical_rate_m_s": 4
+    },
+    {
+      "kind": "fly_to_waypoint",
+      "north_m": 600,
+      "east_m": 0,
+      "altitude_m": 450,
+      "airspeed_m_s": 22,
+      "capture_radius_m": 90
+    },
+    {
+      "kind": "fly_to_waypoint",
+      "north_m": 600,
+      "east_m": 400,
+      "altitude_m": 450,
+      "airspeed_m_s": 22,
+      "capture_radius_m": 90
+    },
+    {
+      "kind": "fly_to_waypoint",
+      "north_m": 200,
+      "east_m": 400,
+      "altitude_m": 450,
+      "airspeed_m_s": 22,
+      "capture_radius_m": 90
+    },
+    {
+      "kind": "fly_to_waypoint",
+      "north_m": 200,
+      "east_m": 0,
+      "altitude_m": 450,
+      "airspeed_m_s": 22,
+      "capture_radius_m": 90
+    },
+    {
+      "kind": "hold_altitude",
+      "altitude_m": 450
+    }
+  ]
+}

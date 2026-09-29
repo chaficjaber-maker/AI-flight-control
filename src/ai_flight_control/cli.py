@@ -4,7 +4,7 @@ import math
 from ai_flight_control.agents import PIDAltitudeAgent, PolicyAltitudeAgent
 from ai_flight_control.dynamics import LongitudinalState
 from ai_flight_control.fixed_wing_plant import FixedWingState
-from ai_flight_control.missions import MissionLibrary
+from ai_flight_control.missions import MissionLibrary, MissionLoadError, load_mission_json
 from ai_flight_control.policy_config import PolicyConfig
 from ai_flight_control.sim import run_altitude_hold
 from ai_flight_control.stack import FlightControlStack
@@ -41,8 +41,17 @@ def _resolve_mission(name: str) -> MissionSpec:
     return catalog[name]
 
 
+def _resolve_stack_mission(args: argparse.Namespace) -> MissionSpec:
+    if args.mission_file:
+        try:
+            return load_mission_json(args.mission_file)
+        except MissionLoadError as exc:
+            raise SystemExit(str(exc)) from exc
+    return _resolve_mission(args.mission_name)
+
+
 def _run_stack(args: argparse.Namespace) -> None:
-    spec = _resolve_mission(args.mission_name)
+    spec = _resolve_stack_mission(args)
     config = PolicyConfig(
         stability=args.stability,
         maneuver=args.maneuver,
@@ -73,8 +82,9 @@ def _run_stack(args: argparse.Namespace) -> None:
         dt=args.dt,
         wind=wind,
     )
+    mission_label = args.mission_file or args.mission_name
     print(
-        f"Mode: stack  mission={args.mission_name}  "
+        f"Mode: stack  mission={mission_label}  "
         f"policies=(S:{args.stability}, M:{args.maneuver}, Mi:{args.mission_policy})"
     )
     print(
@@ -99,6 +109,12 @@ def main() -> None:
     legacy.set_defaults(func=_run_legacy_1d)
 
     stack = sub.add_parser("stack", help="Three-holder fixed-wing stack")
+    stack.add_argument(
+        "--mission-file",
+        type=str,
+        default="",
+        help="Path to mission JSON (overrides --mission-name)",
+    )
     stack.add_argument(
         "--mission-name",
         choices=("hold", "climb", "box", "training"),

@@ -61,8 +61,11 @@ tests/
 
 ```bash
 python3 -m ai_flight_control.cli stack --mission-name training --stability neural
+python3 -m ai_flight_control.cli stack --mission-file missions/examples/box.json
 python3 -m ai_flight_control.cli legacy --target 1000 --agent pid
 ```
+
+Mission JSON supports either a `segments` array (full control) or a `waypoints` array (fly-to sequence). See `missions/examples/`.
 
 ## Fixed-wing harness
 

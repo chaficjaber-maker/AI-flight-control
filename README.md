@@ -1,38 +1,53 @@
 # AI-flight-control
 
-Simulation and control stack for experimenting with **AI-assisted flight control**, starting from a small runnable baseline you can extend toward learned policies, full-state dynamics, or simulator integration (JSBSim, X-Plane, MAVLink, etc.).
+In-repo **flight controller development** for fixed-wing UAVs: plant models, control laws, and a small simulation harness to compare controllers—without mission planning, GCS, or autopilot SITL integration (those come later).
 
-## What’s included
+## Current scope
 
-- **1-D altitude plant** — simplified vertical dynamics for fast iteration
-- **PID altitude-hold autopilot** — classical baseline controller
-- **`PolicyAltitudeAgent`** — same interface as PID; ready to swap in ML/RL weights later
-- **CLI** — quick end-to-end runs from the terminal
+**In scope**
+
+- Controller algorithms (PID baseline → learned policies later)
+- Minimal dynamics to exercise controllers in tests and CLI runs
+- Shared `FlightAgent` / controller interfaces so implementations are swappable
+- Regression tests and simple metrics (tracking error, control effort)
+
+**Out of scope (for now)**
+
+- Waypoint missions, flight profiles, and GCS tooling
+- ArduPilot / PX4 / JSBSim / MAVLink integration
+- Full 6-DOF aerodynamics and hardware-in-the-loop
+
+## What’s included today
+
+- **1-D altitude plant** — simplified vertical channel for fast iteration
+- **PID altitude-hold** — classical baseline
+- **`PolicyAltitudeAgent`** — same interface; placeholder for ML/RL weights
+- **CLI + pytest** — quick A/B runs locally
 
 ## Quick start
 
 ```bash
-python -m pip install -e ".[dev]"
-pytest
-flight-sim --target 1000 --initial 800 --duration 120
+python3 -m pip install -e ".[dev]"
+python3 -m pytest -q
+python3 -m ai_flight_control.cli --target 1000 --initial 800 --duration 600
 ```
 
-## Project layout
+## Layout
 
 ```
 src/ai_flight_control/
-  dynamics.py      # plant model
-  pid.py           # reusable PID
-  sim.py           # simulation loop
-  agents/          # FlightAgent implementations
+  dynamics.py      # plant (will grow toward fixed-wing axes)
+  pid.py           # reusable PID blocks
+  sim.py           # closed-loop harness (not a mission simulator)
+  agents/          # controller implementations
 tests/
 ```
 
-## Roadmap (suggested)
+## Controller dev roadmap (fixed-wing)
 
-1. **Lateral–directional channel** or full 6-DOF linearized model  
-2. **Observation/action spaces** for RL (Gymnasium env wrapper)  
-3. **Training pipeline** (e.g. PPO on altitude + airspeed tracking)  
-4. **Hardware-in-the-loop** via MAVLink / PX4 SITL  
+1. **Longitudinal** — airspeed + altitude (TECS-style or decoupled PID baseline)
+2. **Lateral** — coordinated turn / roll-to-bank guidance into inner loops
+3. **Attitude / rate inner loops** — surface commands with saturations and limits
+4. **AI policies** — replace or wrap selected loops via `FlightAgent` and the same harness
 
-Tell us which direction you want first (research sim, RL training, or autopilot integration), and we can prioritize the next slice of work.
+Integration with external sims and missions stays a separate phase after controllers are stable here.

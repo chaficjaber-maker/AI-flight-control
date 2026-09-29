@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ai_flight_control.wind import WindField, ground_velocity_ned
+
 
 @dataclass(frozen=True)
 class FixedWingState:
@@ -31,9 +33,9 @@ class FixedWingParams:
 class FixedWingControls:
     """Normalized commands in [-1, 1] unless noted."""
 
-    throttle: float  # maps to [0, 1] internally
-    pitch: float  # flight-path angle demand
-    roll: float  # bank angle demand
+    throttle: float
+    pitch: float
+    roll: float
 
 
 def step_fixed_wing(
@@ -41,8 +43,19 @@ def step_fixed_wing(
     controls: FixedWingControls,
     dt: float,
     params: FixedWingParams | None = None,
+    *,
+    wind: WindField | None = None,
+    wind_n_m_s: float = 0.0,
+    wind_e_m_s: float = 0.0,
+    rng: np.random.Generator | None = None,
 ) -> FixedWingState:
     p = params or FixedWingParams()
+    field = wind or WindField()
+    if wind is not None and field.gust_std_m_s > 0 and rng is not None:
+        wind_n_m_s, wind_e_m_s = field.sample(rng)
+    elif wind is not None:
+        wind_n_m_s, wind_e_m_s = field.north_m_s, field.east_m_s
+
     throttle = float(np.clip(controls.throttle, 0.0, 1.0))
     pitch_cmd = float(np.clip(controls.pitch, -1.0, 1.0)) * p.max_flight_path_angle_rad
     bank_cmd = float(np.clip(controls.roll, -1.0, 1.0)) * p.max_bank_rad
@@ -51,10 +64,8 @@ def step_fixed_wing(
     gamma = state.flight_path_angle_rad
     bank = state.bank_rad
 
-    gamma_target = pitch_cmd
-    bank_target = bank_cmd
-    gamma += (gamma_target - gamma) * dt / p.pitch_time_constant_s
-    bank += (bank_target - bank) * dt / p.bank_time_constant_s
+    gamma += (pitch_cmd - gamma) * dt / p.pitch_time_constant_s
+    bank += (bank_cmd - bank) * dt / p.bank_time_constant_s
     gamma = float(np.clip(gamma, -p.max_flight_path_angle_rad, p.max_flight_path_angle_rad))
     bank = float(np.clip(bank, -p.max_bank_rad, p.max_bank_rad))
 
@@ -64,13 +75,14 @@ def step_fixed_wing(
     v_next = float(np.clip(v + v_dot * dt, p.min_airspeed_m_s, p.max_airspeed_m_s))
 
     psi_dot = p.gravity_m_s2 * np.tan(bank) / max(v_next, p.min_airspeed_m_s)
-    h_dot = v_next * np.sin(gamma)
-    vn = v_next * np.cos(gamma)
-
     heading = state.heading_rad + psi_dot * dt
-    north = state.north_m + vn * np.cos(heading) * dt
-    east = state.east_m + vn * np.sin(heading) * dt
-    alt = state.altitude_m + h_dot * dt
+
+    g_n, g_e, g_h = ground_velocity_ned(
+        v_next, heading, gamma, wind_n_m_s, wind_e_m_s
+    )
+    north = state.north_m + g_n * dt
+    east = state.east_m + g_e * dt
+    alt = state.altitude_m + g_h * dt
 
     return FixedWingState(
         north_m=north,

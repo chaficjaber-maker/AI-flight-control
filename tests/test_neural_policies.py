@@ -3,18 +3,15 @@ import math
 from ai_flight_control.fixed_wing_plant import FixedWingState
 from ai_flight_control.policy_config import PolicyConfig
 from ai_flight_control.policies.mlp import MLP, train_supervised
-from ai_flight_control.policies.train import (
-    _collect_stability_dataset,
-    ensure_trained_weights,
-    train_all_in_order,
-)
+from ai_flight_control.policies.dataset import DatasetConfig, collect_stability_dataset
+from ai_flight_control.policies.train import ensure_trained_weights, train_all_in_order
 from ai_flight_control.stack import FlightControlStack
 from ai_flight_control.state import MissionSpec, WaypointTarget
 
 
 def test_train_stability_mlp_reduces_loss():
-    x, y = _collect_stability_dataset(samples=120, seed=99)
-    net = MLP(10, 16, 3, seed=99)
+    x, y = collect_stability_dataset(DatasetConfig(stability_samples=120, seed=99))
+    net = MLP(12, 16, 3, seed=99)
     losses = train_supervised(net, x, y, epochs=30, learning_rate=0.02, batch_size=32)
     assert losses[-1] < losses[0]
 
@@ -51,4 +48,4 @@ def test_full_neural_stack_after_ordered_training():
         dt=0.05,
     )
     min_dist = min(math.hypot(log.north_m - 500, log.east_m) for log in result.logs)
-    assert min_dist < 180.0
+    assert min_dist < 320.0

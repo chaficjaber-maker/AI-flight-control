@@ -1,0 +1,19 @@
+{
+  "models": {
+    "stability": {
+      "input_dim": 12,
+      "hidden_dim": 32,
+      "output_dim": 3
+    },
+    "maneuver": {
+      "input_dim": 14,
+      "hidden_dim": 40,
+      "output_dim": 6
+    },
+    "mission": {
+      "input_dim": 12,
+      "hidden_dim": 24,
+      "output_dim": 2
+    }
+  }
+}

@@ -16,7 +16,7 @@ from ai_flight_control.state import (
     wrap_angle_rad,
 )
 
-STABILITY_INPUT_DIM = 10
+STABILITY_INPUT_DIM = 12
 STABILITY_OUTPUT_DIM = 3
 DEFAULT_WEIGHTS = Path(__file__).resolve().parent / "weights" / "stability.npz"
 
@@ -40,6 +40,8 @@ def stability_features(
             state.altitude_m / 5000.0,
             np.sin(state.heading_rad),
             np.cos(state.heading_rad),
+            state.wind_n_m_s / 15.0,
+            state.wind_e_m_s / 15.0,
         ],
         dtype=float,
     )

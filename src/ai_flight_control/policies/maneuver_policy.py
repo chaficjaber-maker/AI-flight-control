@@ -16,7 +16,7 @@ from ai_flight_control.state import (
     wrap_angle_rad,
 )
 
-MANEUVER_INPUT_DIM = 12
+MANEUVER_INPUT_DIM = 14
 MANEUVER_OUTPUT_DIM = 6
 DEFAULT_WEIGHTS = Path(__file__).resolve().parent / "weights" / "maneuver.npz"
 
@@ -41,6 +41,8 @@ def maneuver_features(state: FlightState, intent: MissionIntent) -> np.ndarray:
             float(kind == MissionSegmentKind.HOLD_ALTITUDE),
             seg.target_altitude_m / 5000.0,
             intent.segment_index / 10.0,
+            state.wind_n_m_s / 15.0,
+            state.wind_e_m_s / 15.0,
         ],
         dtype=float,
     )

@@ -135,3 +135,16 @@ stack = FlightControlStack.from_policy_config(
 ```
 
 Use `PolicyConfig.all_neural()` when all three weight files are trained.
+
+### Wind
+
+`WindField` (steady NED + optional gusts) drives ground-track integration in `step_fixed_wing`.  
+`FlightState.wind_n_m_s` / `wind_e_m_s` feed all three neural feature vectors.
+
+### Embedded export
+
+After training, `scripts/export_policies.py` emits:
+
+- `policies/weights/embedded/*.json` — flat weights for any runtime  
+- `policies/weights/embedded/*.h` — C `*_forward()` inference stubs  
+- `manifest.json` — input/hidden/output dims per layer  

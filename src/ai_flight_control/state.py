@@ -75,6 +75,8 @@ class FlightState:
     heading_rad: float = 0.0
     bank_rad: float = 0.0
     flight_path_angle_rad: float = 0.0
+    wind_n_m_s: float = 0.0
+    wind_e_m_s: float = 0.0
     time_s: float = 0.0
 
     @property

@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from ai_flight_control.dynamics import LongitudinalParams, LongitudinalState, step_longitudinal
 from ai_flight_control.fixed_wing_plant import (
     FixedWingControls,
@@ -7,6 +9,7 @@ from ai_flight_control.fixed_wing_plant import (
     FixedWingState,
     step_fixed_wing,
 )
+from ai_flight_control.wind import WindField
 from ai_flight_control.layers.maneuver import ManeuverLayer
 from ai_flight_control.layers.mission import MissionLayer
 from ai_flight_control.layers.stability import StabilityLayer
@@ -199,6 +202,7 @@ class FlightControlStack:
         duration_s: float,
         dt: float,
         params: FixedWingParams | None = None,
+        wind: WindField | None = None,
     ) -> StackRunResult:
         if duration_s <= 0 or dt <= 0:
             raise ValueError("duration_s and dt must be positive")
@@ -208,7 +212,12 @@ class FlightControlStack:
         logs: list[StackStepLog] = []
         t = 0.0
         steps = int(duration_s / dt)
+        field = wind or WindField.calm()
+        rng = np.random.default_rng(7)
+        wind_n, wind_e = field.north_m_s, field.east_m_s
         for i in range(steps + 1):
+            if field.gust_std_m_s > 0:
+                wind_n, wind_e = field.sample(rng)
             fstate = FlightState(
                 altitude_m=plant.altitude_m,
                 airspeed_m_s=plant.airspeed_m_s,
@@ -217,6 +226,8 @@ class FlightControlStack:
                 heading_rad=plant.heading_rad,
                 bank_rad=plant.bank_rad,
                 flight_path_angle_rad=plant.flight_path_angle_rad,
+                wind_n_m_s=wind_n,
+                wind_e_m_s=wind_e,
                 time_s=t,
             )
             cmd, log = self.step(fstate, dt=dt, step_index=i)
@@ -228,7 +239,13 @@ class FlightControlStack:
                 pitch=cmd.pitch,
                 roll=cmd.roll,
             )
-            plant = step_fixed_wing(plant, controls, dt, params)
+            plant = step_fixed_wing(
+                plant,
+                controls,
+                dt,
+                params,
+                wind=WindField(wind_n, wind_e),
+            )
             t += dt
 
         return StackRunResult(

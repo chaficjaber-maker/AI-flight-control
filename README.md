@@ -84,8 +84,12 @@ Legacy 1-D: `stack.run(...)` with `LongitudinalState` (unchanged tests).
 ## Neural policies (stability → maneuver → mission)
 
 ```bash
-python3 scripts/train_policies.py   # writes policies/weights/*.npz
+python3 scripts/train_policies.py   # rich BC datasets -> policies/weights/*.npz
+python3 scripts/export_policies.py  # JSON + C headers -> policies/weights/embedded/
 ```
+
+**Wind:** pass `WindField` to `run_fixed_wing(..., wind=WindField(north_m_s=4, east_m_s=-3))`.  
+Policy inputs include normalized wind components; BC datasets sample calm, steady, and gusty wind.
 
 ```python
 from ai_flight_control.policy_config import PolicyConfig

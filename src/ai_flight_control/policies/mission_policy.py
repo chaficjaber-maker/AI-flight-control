@@ -15,7 +15,7 @@ from ai_flight_control.state import (
     bearing_ned_rad,
 )
 
-MISSION_INPUT_DIM = 10
+MISSION_INPUT_DIM = 12
 MISSION_OUTPUT_DIM = 2
 DEFAULT_WEIGHTS = Path(__file__).resolve().parent / "weights" / "mission.npz"
 
@@ -36,6 +36,8 @@ def mission_features(state: FlightState, intent: MissionIntent) -> np.ndarray:
             np.sin(intent.bearing_to_target_rad),
             np.cos(intent.bearing_to_target_rad),
             state.altitude_m / 5000.0,
+            state.wind_n_m_s / 15.0,
+            state.wind_e_m_s / 15.0,
         ],
         dtype=float,
     )

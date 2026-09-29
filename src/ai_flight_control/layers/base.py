@@ -1,19 +1,52 @@
 from typing import Protocol, runtime_checkable
 
-from ai_flight_control.state import AdaptationContext
+from ai_flight_control.state import (
+    ActuatorCommand,
+    AdaptationContext,
+    FlightState,
+    ManeuverSetpoint,
+    MissionIntent,
+    MissionSpec,
+)
+
+
+@runtime_checkable
+class MissionController(Protocol):
+    def reset(self, spec: MissionSpec) -> None: ...
+
+    def step(self, state: FlightState) -> MissionIntent: ...
+
+    def adapt(self, context: AdaptationContext) -> None: ...
+
+
+@runtime_checkable
+class ManeuverController(Protocol):
+    def reset(self) -> None: ...
+
+    def step(self, state: FlightState, intent: MissionIntent) -> ManeuverSetpoint: ...
+
+    def adapt(self, context: AdaptationContext) -> None: ...
+
+
+@runtime_checkable
+class StabilityController(Protocol):
+    def reset(self) -> None: ...
+
+    def step(
+        self,
+        state: FlightState,
+        setpoint: ManeuverSetpoint,
+        dt: float,
+    ) -> ActuatorCommand: ...
+
+    def adapt(self, context: AdaptationContext) -> None: ...
+
+    @property
+    def envelope_active_last_step(self) -> bool: ...
 
 
 @runtime_checkable
 class AdaptivePolicy(Protocol):
-    """
-    AI-adaptive control building block.
+    """Online adaptation hook shared by all controllers."""
 
-    Reference implementations use explicit online rules; replace `step` / `adapt`
-    internals with neural policies while keeping the same I/O types.
-    """
-
-    def reset(self) -> None: ...
-
-    def adapt(self, context: AdaptationContext) -> None:
-        """Update internal parameters (bounded online adaptation)."""
-        ...
+    def adapt(self, context: AdaptationContext) -> None: ...

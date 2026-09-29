@@ -15,6 +15,7 @@ dev = [
 
 [project.scripts]
 flight-sim = "ai_flight_control.cli:main"
+flight-stack = "ai_flight_control.cli:main"
 
 [build-system]
 requires = ["setuptools>=69"]

@@ -48,13 +48,20 @@ Each layer implements **`adapt()`** for online tuning (reference rules today; sw
 
 ```
 src/ai_flight_control/
-  state.py         # FlightState, MissionSpec, setpoints
-  stack.py         # FlightControlStack
-  layers/          # mission, maneuver, stability
-  dynamics.py      # plant (will grow toward fixed-wing axes)
-  sim.py           # legacy single-agent harness
-  agents/          # legacy FlightAgent (PID baseline)
+  holders/         # MissionHolder, ManeuverHolder, StabilityHolder (+ registry)
+  layers/          # reference controllers (TECS, turns, waypoint logic)
+  policies/        # neural MLP policies + training + embedded export
+  missions/        # MissionLibrary (hold, climb, box, training route)
+  stack.py         # FlightControlStack composes holders
+  state.py         # shared types
 tests/
+```
+
+### CLI
+
+```bash
+python3 -m ai_flight_control.cli stack --mission-name training --stability neural
+python3 -m ai_flight_control.cli legacy --target 1000 --agent pid
 ```
 
 ## Fixed-wing harness

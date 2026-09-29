@@ -9,10 +9,7 @@ from ai_flight_control.fixed_wing_plant import (
     FixedWingState,
     step_fixed_wing,
 )
-from ai_flight_control.wind import WindField
-from ai_flight_control.layers.maneuver import ManeuverLayer
-from ai_flight_control.layers.mission import MissionLayer
-from ai_flight_control.layers.stability import StabilityLayer
+from ai_flight_control.holders.registry import FlightControlHolders
 from ai_flight_control.policy_config import PolicyConfig
 from ai_flight_control.state import (
     ActuatorCommand,
@@ -21,6 +18,7 @@ from ai_flight_control.state import (
     MissionSpec,
     wrap_angle_rad,
 )
+from ai_flight_control.wind import WindField
 
 
 @dataclass
@@ -49,24 +47,14 @@ class StackRunResult:
 @dataclass
 class FlightControlStack:
     """
-    Composes mission, maneuver, and stability layers (all adaptive policies).
+    Composes mission, maneuver, and stability holders (reference + neural).
     """
 
-    mission: MissionLayer = field(default_factory=MissionLayer)
-    maneuver: ManeuverLayer = field(default_factory=ManeuverLayer)
-    stability: StabilityLayer = field(default_factory=StabilityLayer)
+    holders: FlightControlHolders = field(default_factory=FlightControlHolders.default_reference)
     adapt_every_n_steps: int = 20
 
     def apply_policy_config(self, config: PolicyConfig) -> None:
-        self.stability.policy_mode = config.stability
-        self.maneuver.policy_mode = config.maneuver
-        self.mission.policy_mode = config.mission
-        if config.stability == "neural":
-            self.stability.load_neural_weights()
-        if config.maneuver == "neural":
-            self.maneuver.load_neural_weights()
-        if config.mission == "neural":
-            self.mission.load_neural_weights()
+        self.holders.apply_policy_config(config)
 
     @classmethod
     def from_policy_config(
@@ -96,10 +84,7 @@ class FlightControlStack:
         return cls.from_policy_config(PolicyConfig.rollout_order())
 
     def reset(self, spec: MissionSpec, *, legacy_vertical_only: bool = False) -> None:
-        self.mission.reset(spec)
-        self.maneuver.reset()
-        self.stability.legacy_vertical_only = legacy_vertical_only
-        self.stability.reset()
+        self.holders.reset(spec, legacy_vertical_only=legacy_vertical_only)
 
     def step(
         self,
@@ -108,9 +93,9 @@ class FlightControlStack:
         dt: float,
         step_index: int,
     ) -> tuple[ActuatorCommand, StackStepLog]:
-        intent = self.mission.step(state)
-        maneuver_sp = self.maneuver.step(state, intent)
-        command = self.stability.step(state, maneuver_sp, dt)
+        intent = self.holders.mission.step(state)
+        maneuver_sp = self.holders.maneuver.step(state, intent)
+        command = self.holders.stability.step(state, maneuver_sp, dt)
 
         if step_index > 0 and step_index % self.adapt_every_n_steps == 0:
             ctx = AdaptationContext(
@@ -123,12 +108,12 @@ class FlightControlStack:
                     maneuver_sp.target_vertical_rate_m_s - state.vertical_velocity_m_s
                 ),
                 cross_track_error_m=intent.distance_to_target_m,
-                envelope_active=self.stability.envelope_active_last_step,
+                envelope_active=self.holders.stability.envelope_active_last_step,
                 segment_index=intent.segment_index,
             )
-            self.mission.adapt(ctx)
-            self.maneuver.adapt(ctx)
-            self.stability.adapt(ctx)
+            self.holders.mission.adapt(ctx)
+            self.holders.maneuver.adapt(ctx)
+            self.holders.stability.adapt(ctx)
 
         log = StackStepLog(
             time_s=state.time_s,

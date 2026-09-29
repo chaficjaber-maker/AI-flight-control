@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
 from ai_flight_control.pid import PIDController, PIDGains
+from ai_flight_control.policies.stability_policy import NeuralStabilityPolicy
 from ai_flight_control.state import (
     ActuatorCommand,
     AdaptationContext,
@@ -13,18 +15,21 @@ from ai_flight_control.state import (
 )
 from ai_flight_control.tecs import AdaptiveTecs
 
+PolicyMode = Literal["reference", "neural"]
+
 
 @dataclass
 class StabilityLayer:
     """
     Stability + critical-parameter function (inner layer).
 
-    Fixed-wing: adaptive TECS (energy) + bank/heading inner loop with envelope guardian.
-    Legacy 1-D: vertical-rate PID when airspeed is not used (see `legacy_vertical_only`).
+    `policy_mode="neural"` uses `NeuralStabilityPolicy` (+ guardian).
     """
 
     limits: EnvelopeLimits = field(default_factory=EnvelopeLimits)
     legacy_vertical_only: bool = False
+    policy_mode: PolicyMode = "reference"
+    neural: NeuralStabilityPolicy = field(default_factory=NeuralStabilityPolicy)
     gains: PIDGains = field(
         default_factory=lambda: PIDGains(kp=0.35, ki=0.04, kd=0.12)
     )
@@ -42,11 +47,19 @@ class StabilityLayer:
         self._rate_controller = PIDController(self.gains)
         self._bank_controller = PIDController(self.bank_gains)
         self.tecs.reset()
+        self.neural.limits = self.limits
+        self.neural.reset()
         self._kp_scale = 1.0
         self._bank_scale = 1.0
         self._envelope_events = 0
 
+    def load_neural_weights(self) -> None:
+        self.neural.load_weights()
+
     def adapt(self, context: AdaptationContext) -> None:
+        if self.policy_mode == "neural" and not self.legacy_vertical_only:
+            self.neural.adapt(context)
+            return
         if context.envelope_active:
             self._kp_scale = max(0.6, self._kp_scale - 0.04)
             self._bank_scale = max(0.6, self._bank_scale - 0.04)
@@ -61,6 +74,8 @@ class StabilityLayer:
 
     @property
     def envelope_active_last_step(self) -> bool:
+        if self.policy_mode == "neural" and not self.legacy_vertical_only:
+            return self.neural.envelope_active_last_step
         return self._envelope_events > 0
 
     def step(
@@ -75,7 +90,10 @@ class StabilityLayer:
         if self.legacy_vertical_only:
             return self._step_legacy_vertical(state, setpoint, dt)
 
-        return self._step_fixed_wing(state, setpoint, dt)
+        if self.policy_mode == "neural":
+            return self.neural.step(state, setpoint, dt)
+
+        return self._step_fixed_wing_reference(state, setpoint, dt)
 
     def _step_legacy_vertical(
         self,
@@ -103,7 +121,7 @@ class StabilityLayer:
         thrust = self._rate_controller.step(rate_error, dt=dt) * self._kp_scale
         return ActuatorCommand.from_legacy_thrust(max(-1.0, min(1.0, thrust)))
 
-    def _step_fixed_wing(
+    def _step_fixed_wing_reference(
         self,
         state: FlightState,
         setpoint: ManeuverSetpoint,

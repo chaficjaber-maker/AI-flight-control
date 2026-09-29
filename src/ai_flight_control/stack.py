@@ -10,6 +10,7 @@ from ai_flight_control.fixed_wing_plant import (
 from ai_flight_control.layers.maneuver import ManeuverLayer
 from ai_flight_control.layers.mission import MissionLayer
 from ai_flight_control.layers.stability import StabilityLayer
+from ai_flight_control.policy_config import PolicyConfig
 from ai_flight_control.state import (
     ActuatorCommand,
     AdaptationContext,
@@ -52,6 +53,44 @@ class FlightControlStack:
     maneuver: ManeuverLayer = field(default_factory=ManeuverLayer)
     stability: StabilityLayer = field(default_factory=StabilityLayer)
     adapt_every_n_steps: int = 20
+
+    def apply_policy_config(self, config: PolicyConfig) -> None:
+        self.stability.policy_mode = config.stability
+        self.maneuver.policy_mode = config.maneuver
+        self.mission.policy_mode = config.mission
+        if config.stability == "neural":
+            self.stability.load_neural_weights()
+        if config.maneuver == "neural":
+            self.maneuver.load_neural_weights()
+        if config.mission == "neural":
+            self.mission.load_neural_weights()
+
+    @classmethod
+    def from_policy_config(
+        cls,
+        config: PolicyConfig,
+        *,
+        train_if_missing: bool = True,
+    ) -> "FlightControlStack":
+        if train_if_missing and (
+            config.stability == "neural"
+            or config.maneuver == "neural"
+            or config.mission == "neural"
+        ):
+            from ai_flight_control.policies.train import ensure_trained_weights
+
+            ensure_trained_weights(quick=True)
+        stack = cls()
+        stack.apply_policy_config(config)
+        return stack
+
+    @classmethod
+    def neural_all(cls) -> "FlightControlStack":
+        return cls.from_policy_config(PolicyConfig.all_neural())
+
+    @classmethod
+    def neural_stability_only(cls) -> "FlightControlStack":
+        return cls.from_policy_config(PolicyConfig.rollout_order())
 
     def reset(self, spec: MissionSpec, *, legacy_vertical_only: bool = False) -> None:
         self.mission.reset(spec)

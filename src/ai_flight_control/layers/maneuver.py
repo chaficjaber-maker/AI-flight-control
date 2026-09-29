@@ -1,7 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
+from ai_flight_control.policies.maneuver_policy import NeuralManeuverPolicy
 from ai_flight_control.state import (
     AdaptationContext,
     FlightState,
@@ -12,25 +14,34 @@ from ai_flight_control.state import (
     wrap_angle_rad,
 )
 
+PolicyMode = Literal["reference", "neural"]
+
 
 @dataclass
 class ManeuverLayer:
     """
     Maneuver function (middle layer).
-
-    Longitudinal profiles + coordinated level-turn heading capture.
     """
 
+    policy_mode: PolicyMode = "reference"
+    neural: NeuralManeuverPolicy = field(default_factory=NeuralManeuverPolicy)
     base_vertical_rate_m_s: float = 3.0
     max_bank_rad: float = np.deg2rad(25.0)
     _rate_gain: float = 1.0
     _turn_gain: float = 1.0
 
     def reset(self) -> None:
+        self.neural.reset()
         self._rate_gain = 1.0
         self._turn_gain = 1.0
 
+    def load_neural_weights(self) -> None:
+        self.neural.load_weights()
+
     def adapt(self, context: AdaptationContext) -> None:
+        if self.policy_mode == "neural":
+            self.neural.adapt(context)
+            return
         if context.envelope_active:
             self._rate_gain = max(0.5, self._rate_gain - 0.05)
             self._turn_gain = max(0.5, self._turn_gain - 0.05)
@@ -40,6 +51,11 @@ class ManeuverLayer:
             self._turn_gain = min(1.3, self._turn_gain + 0.02)
 
     def step(self, state: FlightState, intent: MissionIntent) -> ManeuverSetpoint:
+        if self.policy_mode == "neural":
+            return self.neural.step(state, intent)
+        return self._step_reference(state, intent)
+
+    def _step_reference(self, state: FlightState, intent: MissionIntent) -> ManeuverSetpoint:
         seg = intent.segment
         wp = seg.waypoint
 

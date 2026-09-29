@@ -109,11 +109,29 @@ The repo now includes a **simplified fixed-wing plant** (position, altitude, air
 | `layers/stability.py` | Stability AI policy + guardian (reference) |
 | `stack.py` | `FlightControlStack` orchestration |
 
-Reference policies use **transparent online adaptation** (error-driven gain tweaks) so behavior is testable before replacing with neural policies per layer.
+Reference policies use **transparent online adaptation** (error-driven gain tweaks). Trained **NumPy MLP** policies live under `policies/weights/` and are loaded per layer.
 
-## Replacing reference policies with AI
+## Neural policy rollout order
 
-1. Implement `AdaptivePolicy` for one layer only; keep others as reference.
-2. Match I/O types in `state.py`; do not bypass stability guardian.
-3. Train offline in your framework; export weights; load in `load_policy()` hook (to be added per layer).
-4. Regression-test with the same `MissionSpec` fixtures and envelope tests.
+1. **Stability** — `NeuralStabilityPolicy` (+ non-learned guardian)  
+2. **Maneuver** — `NeuralManeuverPolicy`  
+3. **Mission** — `NeuralMissionPolicy` (modulates capture/tolerance scales)
+
+Train in order (behavioral cloning from reference teachers):
+
+```bash
+python3 scripts/train_policies.py
+```
+
+Select policies via `PolicyConfig` / `FlightControlStack.from_policy_config()`:
+
+```python
+from ai_flight_control.policy_config import PolicyConfig
+from ai_flight_control.stack import FlightControlStack
+
+stack = FlightControlStack.from_policy_config(
+    PolicyConfig(stability="neural", maneuver="reference", mission="reference"),
+)
+```
+
+Use `PolicyConfig.all_neural()` when all three weight files are trained.

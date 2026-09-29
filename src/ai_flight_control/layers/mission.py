@@ -1,7 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
+from ai_flight_control.policies.mission_policy import NeuralMissionPolicy
 from ai_flight_control.state import (
     AdaptationContext,
     FlightState,
@@ -11,15 +13,17 @@ from ai_flight_control.state import (
     bearing_ned_rad,
 )
 
+PolicyMode = Literal["reference", "neural"]
+
 
 @dataclass
 class MissionLayer:
     """
     Mission-following function (outer layer).
-
-    Supports altitude segments and lat/lon waypoint sequencing.
     """
 
+    policy_mode: PolicyMode = "reference"
+    neural: NeuralMissionPolicy = field(default_factory=NeuralMissionPolicy)
     altitude_capture_tolerance_m: float = 15.0
     _spec: MissionSpec | None = None
     _segment_index: int = 0
@@ -29,14 +33,26 @@ class MissionLayer:
         self._spec = spec
         self._segment_index = 0
         self._adapt_scale = 1.0
+        self.neural.reset(spec)
+
+    def load_neural_weights(self) -> None:
+        self.neural.load_weights()
 
     def adapt(self, context: AdaptationContext) -> None:
+        if self.policy_mode == "neural":
+            self.neural.adapt(context)
+            return
         if abs(context.altitude_error_m) > 40.0 or context.cross_track_error_m > 80.0:
             self._adapt_scale = min(1.5, self._adapt_scale + 0.02)
         elif abs(context.altitude_error_m) < 5.0 and context.cross_track_error_m < 15.0:
             self._adapt_scale = max(0.8, self._adapt_scale - 0.01)
 
     def step(self, state: FlightState) -> MissionIntent:
+        if self.policy_mode == "neural":
+            return self.neural.step(state)
+        return self._step_reference(state)
+
+    def _step_reference(self, state: FlightState) -> MissionIntent:
         if self._spec is None or not self._spec.segments:
             raise RuntimeError("MissionLayer.reset(spec) must be called before step")
 

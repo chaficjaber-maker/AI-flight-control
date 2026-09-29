@@ -81,8 +81,26 @@ FlightControlStack().run_fixed_wing(
 
 Legacy 1-D: `stack.run(...)` with `LongitudinalState` (unchanged tests).
 
+## Neural policies (stability → maneuver → mission)
+
+```bash
+python3 scripts/train_policies.py   # writes policies/weights/*.npz
+```
+
+```python
+from ai_flight_control.policy_config import PolicyConfig
+from ai_flight_control.stack import FlightControlStack
+
+# Rollout order: stability first, then enable maneuver + mission neural modes
+stack = FlightControlStack.from_policy_config(
+    PolicyConfig(stability="neural", maneuver="neural", mission="neural"),
+)
+```
+
+Stability outputs pass through a **non-learned envelope guardian** before actuators.
+
 ## Next steps
 
-1. Replace reference `adapt()` / `step()` with learned policies per layer  
+1. Export to ONNX / TFLite for embedded targets  
 2. Harden guardian tests (stall margin, cross-track, wind)  
 3. External sim integration (later)

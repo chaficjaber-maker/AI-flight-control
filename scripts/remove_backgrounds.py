@@ -20,7 +20,8 @@ OUT = ROOT / "docs/catalog/processed"
 SESSION = new_session("isnet-general-use")
 SESSION_BIREFNET = new_session("birefnet-general")
 
-BLUR_RADIUS = 22  # background softness
+# Light background blur only (foreground stays 100% original pixels).
+BLUR_RADIUS = 10
 
 
 @dataclass
@@ -64,11 +65,20 @@ def drop_small_islands(alpha: np.ndarray, min_fraction: float = 0.003) -> np.nda
 
 
 def refine_alpha(alpha: np.ndarray) -> np.ndarray:
-    mask = alpha > 120
-    mask = ndimage.binary_dilation(mask, iterations=2)
+    mask = alpha > 110
+    mask = ndimage.binary_dilation(mask, iterations=4)
     mask = ndimage.binary_closing(mask, iterations=2)
     out = (mask.astype(np.uint8) * 255)
-    return np.array(Image.fromarray(out, mode="L").filter(ImageFilter.GaussianBlur(radius=1.2)))
+    # Minimal edge feather so the subject/table stay sharp.
+    return np.array(Image.fromarray(out, mode="L").filter(ImageFilter.GaussianBlur(radius=0.45)))
+
+
+def harden_foreground_alpha(alpha: np.ndarray) -> np.ndarray:
+    """Full-strength original on subjects; blur only where mask is clearly background."""
+    a = alpha.astype(np.float32) / 255.0
+    a = np.clip((a - 0.22) / 0.38, 0.0, 1.0)
+    a = np.where(a > 0.72, 1.0, a)
+    return (a * 255).astype(np.uint8)
 
 
 def rembg_alpha(img: Image.Image, session=SESSION) -> np.ndarray:
@@ -104,17 +114,19 @@ def build_foreground_mask(original: Image.Image, cfg: ImageConfig) -> np.ndarray
         full_alpha = np.zeros((full_h, full_w), dtype=np.uint8)
         cropped_alpha = drop_small_islands(cropped_alpha)
         cropped_alpha = refine_alpha(cropped_alpha)
-        full_alpha[y0:y1, x0:x1] = cropped_alpha
+        full_alpha[y0:y1, x0:x1] = harden_foreground_alpha(cropped_alpha)
         return full_alpha
     alpha = drop_small_islands(alpha)
-    return refine_alpha(alpha)
+    alpha = refine_alpha(alpha)
+    return harden_foreground_alpha(alpha)
 
 
 def blur_background(original: Image.Image, alpha: np.ndarray, radius: float) -> Image.Image:
     blurred = original.filter(ImageFilter.GaussianBlur(radius=radius))
     fg = np.array(original, dtype=np.float32)
     bg = np.array(blurred, dtype=np.float32)
-    a = (alpha.astype(np.float32) / 255.0)[..., np.newaxis]
+    a = harden_foreground_alpha(alpha).astype(np.float32) / 255.0
+    a = a[..., np.newaxis]
     out = (fg * a + bg * (1.0 - a)).clip(0, 255).astype(np.uint8)
     return Image.fromarray(out, mode="RGB")
 
@@ -122,16 +134,16 @@ def blur_background(original: Image.Image, alpha: np.ndarray, radius: float) -> 
 def process(path: Path) -> None:
     cfg = CONFIG.get(path.stem, ImageConfig())
     original = Image.open(path).convert("RGB")
-    radius = max(14, min(original.size) // 45)
     alpha = build_foreground_mask(original, cfg)
-    result = blur_background(original, alpha, radius=max(BLUR_RADIUS, radius))
+    blur_radius = BLUR_RADIUS
+    result = blur_background(original, alpha, radius=blur_radius)
 
     OUT.mkdir(parents=True, exist_ok=True)
     stem = path.stem
     result.save(OUT / f"{stem}-blurred.jpg", quality=93, optimize=True)
     # Optional soft mask for edits
     Image.fromarray(alpha, mode="L").save(OUT / f"{stem}-mask.png")
-    print("OK", path.name, f"blur={max(BLUR_RADIUS, radius):.0f}")
+    print("OK", path.name, f"blur={blur_radius:.0f}")
 
 
 def main() -> None:

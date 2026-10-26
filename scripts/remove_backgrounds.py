@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove room backgrounds; preserve kid, bear, props, and label text."""
+"""Blur background only; keep subjects, props, and labels sharp."""
 
 from __future__ import annotations
 
@@ -12,34 +12,41 @@ from PIL import Image, ImageFilter
 from rembg import new_session, remove
 from scipy import ndimage
 
-SRC = Path("/home/ubuntu/.cursor/projects/workspace/assets")
-OUT = Path(__file__).resolve().parents[1] / "docs/catalog/processed"
-BACKDROP = (248, 247, 245)
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "docs/catalog/baking-source"
+ASSETS = Path("/home/ubuntu/.cursor/projects/workspace/assets")
+OUT = ROOT / "docs/catalog/processed"
+
 SESSION = new_session("isnet-general-use")
 SESSION_BIREFNET = new_session("birefnet-general")
+
+BLUR_RADIUS = 22  # background softness
 
 
 @dataclass
 class ImageConfig:
-    crop: tuple[float, float, float, float] | None = None  # x0,y0,x1,y1 normalized
-    trim_bottom: float | None = None  # fraction of fg bbox bottom to cut (countertop)
-    merge_left_crop: float | None = None  # extra rembg pass on left strip (bear + flour)
+    crop: tuple[float, float, float, float] | None = None
+    merge_left_crop: float | None = None
 
 
 CONFIG: dict[str, ImageConfig] = {
-    "01a17792-6139-72c6-85ca-b8d98f4bec5b": ImageConfig(crop=(0.0, 0.22, 1.0, 1.0)),
-    "01a17792-6139-719d-a9d9-ab82d528b780": ImageConfig(trim_bottom=0.24),
-    "01a17792-6139-7bfe-90f7-2feb70f463a1": ImageConfig(
-        crop=(0.0, 0.16, 1.0, 1.0),
-        merge_left_crop=0.46,
-    ),
+    "01a17792-6139-7bfe-90f7-2feb70f463a1": ImageConfig(merge_left_crop=0.46),
 }
 
 
-def crop_image(img: Image.Image, rect: tuple[float, float, float, float]) -> Image.Image:
+def source_paths() -> list[Path]:
+    if SRC.exists():
+        files = sorted(SRC.glob("01a17792-*.jpg"))
+        if files:
+            return files
+    return sorted(ASSETS.glob("01a17792-*.jpg"))
+
+
+def crop_image(img: Image.Image, rect: tuple[float, float, float, float]) -> tuple[Image.Image, tuple[int, int, int, int]]:
     w, h = img.size
     x0, y0, x1, y1 = rect
-    return img.crop((int(w * x0), int(h * y0), int(w * x1), int(h * y1)))
+    box = (int(w * x0), int(h * y0), int(w * x1), int(h * y1))
+    return img.crop(box), box
 
 
 def drop_small_islands(alpha: np.ndarray, min_fraction: float = 0.003) -> np.ndarray:
@@ -61,103 +68,77 @@ def refine_alpha(alpha: np.ndarray) -> np.ndarray:
     mask = ndimage.binary_dilation(mask, iterations=2)
     mask = ndimage.binary_closing(mask, iterations=2)
     out = (mask.astype(np.uint8) * 255)
-    return np.array(Image.fromarray(out, mode="L").filter(ImageFilter.GaussianBlur(radius=0.5)))
+    return np.array(Image.fromarray(out, mode="L").filter(ImageFilter.GaussianBlur(radius=1.2)))
 
 
-def trim_bottom_counter(alpha: np.ndarray, trim_fraction: float) -> np.ndarray:
-    ys = np.where(alpha > 128)[0]
-    if len(ys) == 0:
-        return alpha
-    y_max = ys.max()
-    y_min = ys.min()
-    cut = int(y_max - (y_max - y_min) * trim_fraction)
-    out = alpha.copy()
-    out[cut + 1 :] = 0
-    return out
-
-
-def remove_thin_artifacts(alpha: np.ndarray) -> np.ndarray:
-    """Drop very thin islands (e.g. chair metal rods) while keeping main props."""
-    mask = alpha > 128
-    labeled, count = ndimage.label(mask)
-    keep = np.zeros_like(mask)
-    for i in range(1, count + 1):
-        region = labeled == i
-        area = region.sum()
-        if area < alpha.size * 0.003:
-            continue
-        ys, xs = np.where(region)
-        height = ys.max() - ys.min() + 1
-        width = xs.max() - xs.min() + 1
-        aspect = max(height, width) / max(1, min(height, width))
-        if area < alpha.size * 0.01 and aspect > 6:
-            continue
-        keep |= region
-    return np.where(keep, np.maximum(alpha, 220), 0).astype(np.uint8)
-
-
-def add_soft_shadow(rgba: Image.Image) -> Image.Image:
-    w, h = rgba.size
-    shadow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    blob = rgba.split()[3].point(lambda p: 65 if p > 40 else 0).filter(ImageFilter.GaussianBlur(radius=12))
-    shadow.putalpha(blob)
-    canvas = Image.new("RGBA", (w, h), BACKDROP + (255,))
-    canvas.alpha_composite(shadow, (0, 5))
-    canvas.alpha_composite(rgba, (0, 0))
-    return canvas
-
-
-def rembg_rgba(img: Image.Image, session=SESSION) -> Image.Image:
+def rembg_alpha(img: Image.Image, session=SESSION) -> np.ndarray:
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=95)
     cut = remove(buf.getvalue(), session=session, post_process_mask=False)
-    return Image.open(io.BytesIO(cut)).convert("RGBA")
+    rgba = Image.open(io.BytesIO(cut)).convert("RGBA")
+    return np.array(rgba.split()[3])
 
 
-def merge_left_rgba(base: Image.Image, left: Image.Image, left_width: int) -> Image.Image:
-    base = base.copy()
-    left = left.resize((left_width, base.height), Image.Resampling.LANCZOS)
-    px_base = base.load()
-    px_left = left.load()
-    for y in range(base.height):
-        for x in range(left_width):
-            lr, lg, lb, la = px_left[x, y]
-            _br, _bg, _bb, ba = px_base[x, y]
-            if la > 140 and la >= ba:
-                px_base[x, y] = (lr, lg, lb, la)
-    return base
+def merge_left_alpha(base: np.ndarray, left: np.ndarray) -> np.ndarray:
+    h, w = base.shape
+    left = np.array(Image.fromarray(left, mode="L").resize((w, h), Image.Resampling.LANCZOS))
+    return np.where(left > 140, np.maximum(base, left), base)
+
+
+def build_foreground_mask(original: Image.Image, cfg: ImageConfig) -> np.ndarray:
+    alpha = rembg_alpha(original)
+    if cfg.merge_left_crop:
+        lw = int(original.size[0] * cfg.merge_left_crop)
+        left_crop = original.crop((0, 0, lw, original.size[1]))
+        left_alpha = rembg_alpha(left_crop, session=SESSION_BIREFNET)
+        alpha[:, :lw] = merge_left_alpha(alpha[:, :lw], left_alpha)
+    if cfg.crop:
+        work, (x0, y0, x1, y1) = crop_image(original, cfg.crop)
+        cropped_alpha = rembg_alpha(work)
+        if cfg.merge_left_crop:
+            lw = int(work.size[0] * cfg.merge_left_crop)
+            left_crop = work.crop((0, 0, lw, work.size[1]))
+            left_alpha = rembg_alpha(left_crop, session=SESSION_BIREFNET)
+            cropped_alpha = merge_left_alpha(cropped_alpha, left_alpha)
+        full_h, full_w = original.size[1], original.size[0]
+        full_alpha = np.zeros((full_h, full_w), dtype=np.uint8)
+        cropped_alpha = drop_small_islands(cropped_alpha)
+        cropped_alpha = refine_alpha(cropped_alpha)
+        full_alpha[y0:y1, x0:x1] = cropped_alpha
+        return full_alpha
+    alpha = drop_small_islands(alpha)
+    return refine_alpha(alpha)
+
+
+def blur_background(original: Image.Image, alpha: np.ndarray, radius: float) -> Image.Image:
+    blurred = original.filter(ImageFilter.GaussianBlur(radius=radius))
+    fg = np.array(original, dtype=np.float32)
+    bg = np.array(blurred, dtype=np.float32)
+    a = (alpha.astype(np.float32) / 255.0)[..., np.newaxis]
+    out = (fg * a + bg * (1.0 - a)).clip(0, 255).astype(np.uint8)
+    return Image.fromarray(out, mode="RGB")
 
 
 def process(path: Path) -> None:
     cfg = CONFIG.get(path.stem, ImageConfig())
     original = Image.open(path).convert("RGB")
-    work = crop_image(original, cfg.crop) if cfg.crop else original
-
-    rgba = rembg_rgba(work)
-    if cfg.merge_left_crop:
-        w, h = work.size
-        lw = int(w * cfg.merge_left_crop)
-        left_crop = work.crop((0, 0, lw, h))
-        left_rgba = rembg_rgba(left_crop, session=SESSION_BIREFNET)
-        rgba = merge_left_rgba(rgba, left_rgba, lw)
-
-    alpha = np.array(rgba.split()[3])
-    alpha = drop_small_islands(alpha)
-    alpha = remove_thin_artifacts(alpha)
-    alpha = refine_alpha(alpha)
-    if cfg.trim_bottom:
-        alpha = trim_bottom_counter(alpha, cfg.trim_bottom)
-    rgba = Image.merge("RGBA", (*rgba.split()[:3], Image.fromarray(alpha)))
+    radius = max(14, min(original.size) // 45)
+    alpha = build_foreground_mask(original, cfg)
+    result = blur_background(original, alpha, radius=max(BLUR_RADIUS, radius))
 
     OUT.mkdir(parents=True, exist_ok=True)
     stem = path.stem
-    rgba.save(OUT / f"{stem}-nobg.png")
-    add_soft_shadow(rgba).convert("RGB").save(OUT / f"{stem}-nobg.jpg", quality=93, optimize=True)
-    print("OK", path.name)
+    result.save(OUT / f"{stem}-blurred.jpg", quality=93, optimize=True)
+    # Optional soft mask for edits
+    Image.fromarray(alpha, mode="L").save(OUT / f"{stem}-mask.png")
+    print("OK", path.name, f"blur={max(BLUR_RADIUS, radius):.0f}")
 
 
 def main() -> None:
-    for p in sorted(SRC.glob("01a17792-*.jpg")):
+    paths = source_paths()
+    if not paths:
+        raise SystemExit("No source images found.")
+    for p in paths:
         process(p)
 
 

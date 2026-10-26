@@ -20,8 +20,8 @@ OUT = ROOT / "docs/catalog/processed"
 SESSION = new_session("isnet-general-use")
 SESSION_BIREFNET = new_session("birefnet-general")
 
-# Light background blur only (foreground stays 100% original pixels).
-BLUR_RADIUS = 10
+# Very subtle background blur; foreground + table in front of kid stay sharp.
+BLUR_RADIUS = 5
 
 
 @dataclass
@@ -65,20 +65,36 @@ def drop_small_islands(alpha: np.ndarray, min_fraction: float = 0.003) -> np.nda
 
 
 def refine_alpha(alpha: np.ndarray) -> np.ndarray:
-    mask = alpha > 110
-    mask = ndimage.binary_dilation(mask, iterations=4)
+    mask = alpha > 100
+    mask = ndimage.binary_dilation(mask, iterations=6)
     mask = ndimage.binary_closing(mask, iterations=2)
-    out = (mask.astype(np.uint8) * 255)
-    # Minimal edge feather so the subject/table stay sharp.
-    return np.array(Image.fromarray(out, mode="L").filter(ImageFilter.GaussianBlur(radius=0.45)))
+    return (mask.astype(np.uint8) * 255)
+
+
+def extend_surface_in_front(alpha: np.ndarray) -> np.ndarray:
+    """Keep table/floor and props in front of the kid fully sharp."""
+    mask = alpha > 120
+    if not mask.any():
+        return alpha
+    ys, xs = np.where(mask)
+    y_top, y_bottom = int(ys.min()), int(ys.max())
+    h, w = alpha.shape
+    x_left = max(0, int(xs.min() - w * 0.06))
+    x_right = min(w, int(xs.max() + w * 0.06))
+    out = alpha.copy()
+    # Surface band: from lower third of subject down to bottom of frame.
+    surface_start = y_top + int((y_bottom - y_top) * 0.35)
+    out[surface_start:, x_left:x_right] = 255
+    return out
 
 
 def harden_foreground_alpha(alpha: np.ndarray) -> np.ndarray:
-    """Full-strength original on subjects; blur only where mask is clearly background."""
+    """Binary-sharp foreground; blur only on clear background pixels."""
     a = alpha.astype(np.float32) / 255.0
-    a = np.clip((a - 0.22) / 0.38, 0.0, 1.0)
-    a = np.where(a > 0.72, 1.0, a)
-    return (a * 255).astype(np.uint8)
+    a = np.where(a > 0.12, 1.0, 0.0)
+    # Hairline blend at outer edge only (avoid softening the kid or table).
+    soft = np.array(Image.fromarray((a * 255).astype(np.uint8), mode="L").filter(ImageFilter.GaussianBlur(radius=0.35)))
+    return np.array(soft, dtype=np.uint8)
 
 
 def rembg_alpha(img: Image.Image, session=SESSION) -> np.ndarray:
@@ -114,10 +130,12 @@ def build_foreground_mask(original: Image.Image, cfg: ImageConfig) -> np.ndarray
         full_alpha = np.zeros((full_h, full_w), dtype=np.uint8)
         cropped_alpha = drop_small_islands(cropped_alpha)
         cropped_alpha = refine_alpha(cropped_alpha)
+        cropped_alpha = extend_surface_in_front(cropped_alpha)
         full_alpha[y0:y1, x0:x1] = harden_foreground_alpha(cropped_alpha)
         return full_alpha
     alpha = drop_small_islands(alpha)
     alpha = refine_alpha(alpha)
+    alpha = extend_surface_in_front(alpha)
     return harden_foreground_alpha(alpha)
 
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Generate AI Flight Control design-analysis slide as .pptx."""
 
+from io import BytesIO
 from pathlib import Path
 
+from PIL import Image, ImageDraw
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
@@ -57,6 +59,26 @@ def set_run(run, *, size=18, bold=False, color=BODY, font_name="Calibri"):
     run.font.bold = bold
     run.font.color.rgb = color
     run.font.name = font_name
+
+
+def timeline_bar_png() -> BytesIO:
+    """Raster timeline bar (track + fill + arrow) for reliable rendering in PowerPoint."""
+    width, height = 2200, 120
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    track = (0, 34, width - 4, height - 34)
+    draw.rounded_rectangle(track, radius=height // 2, fill=(33, 38, 45), outline=(88, 148, 255), width=2)
+    tip = 78
+    shaft_right = width - tip - 14
+    draw.rounded_rectangle((6, 38, shaft_right, height - 38), radius=16, fill=(88, 166, 255))
+    draw.polygon(
+        [(shaft_right - 8, 38), (shaft_right - 8, height - 38), (width - 12, height // 2)],
+        fill=(88, 166, 255),
+    )
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
 
 
 def main():
@@ -145,21 +167,21 @@ def main():
     run.text = OUTCOME
     set_run(run, size=22, bold=False, color=TITLE)
 
-    # Footer bar
-    foot_h = Inches(1.35)
+    # Footer
+    foot_h = Inches(1.55)
     foot_top = H - foot_h
     foot = slide.shapes.add_shape(1, 0, foot_top, W, foot_h)
     set_fill(foot, PANEL)
     foot.line.color.rgb = BORDER
 
-    time_lbl = add_textbox(slide, margin_l, foot_top + Inches(0.18), Inches(3), Inches(0.25))
+    time_lbl = add_textbox(slide, margin_l, foot_top + Inches(0.16), Inches(3), Inches(0.25))
     p = time_lbl.text_frame.paragraphs[0]
     r = p.add_run()
     r.text = "TIME TO OUTCOME"
     set_run(r, size=9, bold=True, color=MUTED)
 
     note = add_textbox(
-        slide, Inches(4.2), foot_top + Inches(0.15), W - Inches(4.85), Inches(0.55)
+        slide, Inches(4.2), foot_top + Inches(0.12), W - Inches(4.85), Inches(0.55)
     )
     tf = note.text_frame
     p = tf.paragraphs[0]
@@ -169,45 +191,29 @@ def main():
     set_run(r, size=10, color=MUTED)
 
     bar_left = margin_l
-    bar_w = content_w - Inches(2.35)
-    bar_h = Inches(0.16)
-    bar_top = foot_top + Inches(0.6)
-    arrow_h = Inches(0.26)
-    arrow_top = bar_top - (arrow_h - bar_h) / 2
+    bar_w = content_w - Inches(2.25)
+    bar_h = Inches(0.45)
+    bar_top = foot_top + Inches(0.5)
 
-    track = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, bar_left, bar_top, bar_w, bar_h)
-    set_fill(track, TRACK)
-    track.line.color.rgb = BORDER
+    slide.shapes.add_picture(timeline_bar_png(), bar_left, bar_top, width=bar_w, height=bar_h)
 
-    progress = slide.shapes.add_shape(
-        MSO_SHAPE.RIGHT_ARROW,
-        bar_left,
-        arrow_top,
-        bar_w - Inches(0.04),
-        arrow_h,
-    )
-    set_fill(progress, ACCENT)
-    progress.line.fill.background()
-    progress.adjustments[0] = 0.18
-    progress.adjustments[1] = 0.55
-
-    start_lbl = add_textbox(slide, bar_left, bar_top + Inches(0.22), Inches(0.8), Inches(0.2))
+    start_lbl = add_textbox(slide, bar_left, bar_top + bar_h + Inches(0.05), Inches(0.9), Inches(0.22))
     p = start_lbl.text_frame.paragraphs[0]
     r = p.add_run()
     r.text = "Start"
-    set_run(r, size=8, color=MUTED)
+    set_run(r, size=9, bold=True, color=MUTED)
 
     end_lbl = add_textbox(
-        slide, bar_left + bar_w - Inches(0.95), bar_top + Inches(0.22), Inches(1), Inches(0.2)
+        slide, bar_left + bar_w - Inches(1.05), bar_top + bar_h + Inches(0.05), Inches(1.1), Inches(0.22)
     )
     p = end_lbl.text_frame.paragraphs[0]
     p.alignment = PP_ALIGN.RIGHT
     r = p.add_run()
     r.text = "Outcome"
-    set_run(r, size=8, color=MUTED)
+    set_run(r, size=9, bold=True, color=MUTED)
 
     time_val = add_textbox(
-        slide, bar_left + bar_w + Inches(0.15), arrow_top - Inches(0.06), Inches(2.2), Inches(0.5)
+        slide, bar_left + bar_w + Inches(0.1), bar_top + Inches(0.04), Inches(2.2), Inches(0.55)
     )
     p = time_val.text_frame.paragraphs[0]
     r = p.add_run()

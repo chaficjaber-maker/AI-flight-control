@@ -1,0 +1,160 @@
+{
+  "commands": [
+    {
+      "command": "parameters.change",
+      "params": { "name": "engage_width", "expression": "1520 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "engage_height", "expression": "1050 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "engage_depth", "expression": "420 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "panel_thickness", "expression": "45 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "frame", "expression": "70 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "search_length", "expression": "1776 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "search_width", "expression": "940 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "search_depth", "expression": "430 mm" }
+    },
+    {
+      "command": "parameters.change",
+      "params": { "name": "engage_tilt", "expression": "18 deg" }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "engage_width",
+        "width": "engage_depth",
+        "height": "engage_height",
+        "corner": [-760, 30, 120],
+        "body_name": "1RS2_engage_housing"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "engage_width",
+        "width": "panel_thickness",
+        "height": "engage_height",
+        "corner": [-760, 0, 120],
+        "body_name": "1RS2_pesa_face"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "frame",
+        "width": "panel_thickness",
+        "height": "engage_height",
+        "corner": [-760, -10, 120],
+        "body_name": "1RS2_frame_left"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "frame",
+        "width": "panel_thickness",
+        "height": "engage_height",
+        "corner": [690, -10, 120],
+        "body_name": "1RS2_frame_right"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "engage_width",
+        "width": "panel_thickness",
+        "height": "frame",
+        "corner": [-760, -10, 1170],
+        "body_name": "1RS2_frame_top"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "engage_width",
+        "width": "panel_thickness",
+        "height": "frame",
+        "corner": [-760, -10, 120],
+        "body_name": "1RS2_frame_bottom"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": 260,
+        "width": 180,
+        "height": 120,
+        "corner": [-130, 350, 0],
+        "body_name": "turret_roof_pad"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": "search_length",
+        "width": "search_depth",
+        "height": "search_width",
+        "corner": [-888, 140, 1220],
+        "body_name": "2RL80_search_housing"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": 190,
+        "width": 180,
+        "height": 190,
+        "corner": [-605, 170, 1300],
+        "body_name": "2RL80_mount_left"
+      }
+    },
+    {
+      "command": "solid.box",
+      "params": {
+        "length": 190,
+        "width": 180,
+        "height": 190,
+        "corner": [415, 170, 1300],
+        "body_name": "2RL80_mount_right"
+      }
+    },
+    {
+      "command": "solid.move",
+      "params": {
+        "bodies": [
+          "1RS2_engage_housing",
+          "1RS2_pesa_face",
+          "1RS2_frame_left",
+          "1RS2_frame_right",
+          "1RS2_frame_top",
+          "1RS2_frame_bottom"
+        ],
+        "origin": [0, 0, 120],
+        "axis": [1, 0, 0],
+        "angle": "engage_tilt"
+      }
+    },
+    {
+      "command": "file.save_as",
+      "params": { "path": "pantsir-s1-radar.sc" }
+    }
+  ]
+}

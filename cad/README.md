@@ -16,7 +16,13 @@ Reference image: `pantsir-s1-reference.png`
 
 ## Build locally (SolidCraft required)
 
-From this folder:
+From this folder (easiest):
+
+```sh
+./build.sh
+```
+
+Or manually:
 
 ```sh
 solidcraft-cli run pantsir-s1-radar.json
